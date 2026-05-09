@@ -1,0 +1,13 @@
+/target/
+data/*.sqlite
+data/*.sqlite-*
+*.log
+.env
+brain_config.toml
+
+# Local AI models
+/model/
+/models/
+*.gguf
+*.safetensors
+*.bin

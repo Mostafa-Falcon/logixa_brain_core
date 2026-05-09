@@ -1,0 +1,31 @@
+[server]
+host = "127.0.0.1"
+port = 8787
+
+[paths]
+data_dir = "./data"
+database_path = "./data/brain.sqlite"
+
+[model]
+name = "Qwen3.5-4B Brain Fast"
+model_id = "qwen3.5-4b-brain-fast"
+model_path = "/home/logixa/logixa_ai/logixa_brain_core/model/Qwen3.5-4B-UD-Q4_K_XL.gguf"
+llama_server_binary = "/home/logixa/logixa_ai/tools/llama.cpp/build/bin/llama-server"
+llama_host = "127.0.0.1"
+llama_port = 8788
+context_size = 8192
+threads = 8
+max_tokens = 1024
+temperature = 0.7
+top_p = 0.9
+auto_start = true
+keep_loaded = false
+idle_timeout_seconds = 180
+mock_when_unavailable = true
+extra_args = []
+
+[brain]
+default_project_id = "logixa_brain"
+default_language = "ar-EG"
+max_recent_messages = 12
+memory_search_limit = 6
