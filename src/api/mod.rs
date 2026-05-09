@@ -25,9 +25,14 @@ pub fn router(state: AppState) -> Router {
             "/projects",
             get(routes_projects::list_projects).post(routes_projects::upsert_project),
         )
+        .route("/projects/active", get(routes_projects::active_project))
         .route(
             "/projects/activate/:id",
             post(routes_projects::activate_project),
+        )
+        .route(
+            "/projects/:id/state",
+            get(routes_projects::get_project_state).post(routes_projects::update_project_state),
         )
         .route("/tools", get(routes_tools::list_tools))
         .route("/tools/run", post(routes_tools::run_tool))

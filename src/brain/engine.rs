@@ -31,7 +31,6 @@ impl BrainEngine {
             .unwrap_or_else(|| IntentRouter::classify(&req.message));
 
         let (conversation_id, project_id) = self.resolve_conversation_scope(&req)?;
-
         self.state
             .db
             .save_message(&conversation_id, "user", &req.message, Some(mode.as_str()))?;
@@ -45,13 +44,19 @@ impl BrainEngine {
             &mode,
             use_memory,
         )?;
+
+        let active_project_id = assembled.project_id.clone();
         let history_messages_used = assembled.recent_messages.len().saturating_sub(1);
         let history_used = history_messages_used > 0;
         let memory_items_used = assembled.memories.len();
         let memory_used = use_memory && memory_items_used > 0;
+        let project_state_used = assembled.project_state.is_some();
         let messages = PromptBuilder::build(&assembled, &req.message);
 
         let mut events = vec!["preparing_context".to_string()];
+        if project_state_used {
+            events.push("project_state_loaded".to_string());
+        }
         if history_used {
             events.push("conversation_history_loaded".to_string());
         }
@@ -102,8 +107,10 @@ impl BrainEngine {
             "chat_completed",
             Some(serde_json::json!({
                 "conversation_id": conversation_id,
+                "project_id": active_project_id,
                 "mode": mode.as_str(),
                 "mocked": mocked,
+                "project_state_used": project_state_used,
                 "history_used": history_used,
                 "history_messages_used": history_messages_used,
                 "memory_used": memory_used,
@@ -115,12 +122,14 @@ impl BrainEngine {
         Ok(ChatResponse {
             answer,
             conversation_id,
+            project_id: active_project_id,
             mode_used: mode.as_str().to_string(),
             model_used: cfg.model.name,
             memory_used,
             memory_items_used,
             history_used,
             history_messages_used,
+            project_state_used,
             events,
             tool_calls: vec![],
             mocked,

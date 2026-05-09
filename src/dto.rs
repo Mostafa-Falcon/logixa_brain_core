@@ -13,12 +13,14 @@ pub struct ChatRequest {
 pub struct ChatResponse {
     pub answer: String,
     pub conversation_id: String,
+    pub project_id: String,
     pub mode_used: String,
     pub model_used: String,
     pub memory_used: bool,
     pub memory_items_used: usize,
     pub history_used: bool,
     pub history_messages_used: usize,
+    pub project_state_used: bool,
     pub events: Vec<String>,
     pub tool_calls: Vec<String>,
     pub mocked: bool,
@@ -62,6 +64,16 @@ pub struct ProjectUpsertRequest {
     pub path: Option<String>,
     pub kind: Option<String>,
     pub rules: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectStateUpdateRequest {
+    pub current_step: Option<String>,
+    pub last_commit: Option<String>,
+    pub last_tag: Option<String>,
+    pub summary: Option<String>,
+    pub next_step: Option<String>,
+    pub status: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

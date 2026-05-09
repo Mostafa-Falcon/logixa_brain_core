@@ -41,6 +41,19 @@ pub struct ProjectRecord {
     pub updated_at: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectStateRecord {
+    pub project_id: String,
+    pub current_step: Option<String>,
+    pub last_commit: Option<String>,
+    pub last_tag: Option<String>,
+    pub summary: Option<String>,
+    pub next_step: Option<String>,
+    pub status: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
 pub struct BrainDb {
     conn: Mutex<Connection>,
 }
@@ -121,6 +134,19 @@ impl BrainDb {
                     updated_at TEXT NOT NULL
                 );
 
+                CREATE TABLE IF NOT EXISTS project_states (
+                    project_id TEXT PRIMARY KEY,
+                    current_step TEXT,
+                    last_commit TEXT,
+                    last_tag TEXT,
+                    summary TEXT,
+                    next_step TEXT,
+                    status TEXT NOT NULL DEFAULT 'active',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+                );
+
                 CREATE TABLE IF NOT EXISTS active_project (
                     singleton_id INTEGER PRIMARY KEY CHECK(singleton_id = 1),
                     project_id TEXT NOT NULL,
@@ -166,7 +192,18 @@ impl BrainDb {
         self.with_conn(|conn| {
             conn.execute(
                 "INSERT OR IGNORE INTO projects (id, name, path, kind, rules, status, created_at, updated_at) VALUES (?1, ?2, NULL, ?3, ?4, 'active', ?5, ?5)",
-                params![config.brain.default_project_id, "Logixa Brain", "brain-core", "Headless local AI brain core. UI is always an external client." , now],
+                params![config.brain.default_project_id, "Logixa Brain", "brain-core", "Headless local AI brain core. UI is always an external client.", now],
+            )?;
+            conn.execute(
+                "INSERT OR IGNORE INTO project_states (project_id, current_step, last_commit, last_tag, summary, next_step, status, created_at, updated_at) VALUES (?1, ?2, NULL, ?3, ?4, ?5, 'active', ?6, ?6)",
+                params![
+                    config.brain.default_project_id,
+                    "Step 5 — Project State Memory",
+                    "brain-step4-long-term-memory",
+                    "Logixa Brain Core is a headless Rust service with Qwen runtime, Gigi prompt policy, conversation history, and long-term memory.",
+                    "Add project state memory so Gigi can know the active project status.",
+                    now
+                ],
             )?;
             conn.execute(
                 "INSERT OR IGNORE INTO active_project (singleton_id, project_id, updated_at) VALUES (1, ?1, ?2)",
@@ -420,20 +457,34 @@ impl BrainDb {
     pub fn list_projects(&self) -> AppResult<Vec<ProjectRecord>> {
         self.with_conn(|conn| {
             let mut stmt = conn.prepare("SELECT id, name, path, kind, rules, status, active_model_profile, created_at, updated_at FROM projects ORDER BY updated_at DESC")?;
-            let rows = stmt.query_map([], |row| {
-                Ok(ProjectRecord {
-                    id: row.get(0)?,
-                    name: row.get(1)?,
-                    path: row.get(2)?,
-                    kind: row.get(3)?,
-                    rules: row.get(4)?,
-                    status: row.get(5)?,
-                    active_model_profile: row.get(6)?,
-                    created_at: row.get(7)?,
-                    updated_at: row.get(8)?,
-                })
-            })?;
+            let rows = stmt.query_map([], |row| Self::map_project_row(row))?;
             Ok(rows.collect::<Result<Vec<_>, _>>()?)
+        })
+    }
+
+    pub fn get_project(&self, id: &str) -> AppResult<Option<ProjectRecord>> {
+        self.with_conn(|conn| {
+            let mut stmt = conn.prepare("SELECT id, name, path, kind, rules, status, active_model_profile, created_at, updated_at FROM projects WHERE id = ?1")?;
+            let mut rows = stmt.query_map(params![id], |row| Self::map_project_row(row))?;
+            if let Some(row) = rows.next() {
+                Ok(Some(row?))
+            } else {
+                Ok(None)
+            }
+        })
+    }
+
+    fn map_project_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ProjectRecord> {
+        Ok(ProjectRecord {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            path: row.get(2)?,
+            kind: row.get(3)?,
+            rules: row.get(4)?,
+            status: row.get(5)?,
+            active_model_profile: row.get(6)?,
+            created_at: row.get(7)?,
+            updated_at: row.get(8)?,
         })
     }
 
@@ -469,6 +520,64 @@ impl BrainDb {
                 |row| row.get(0),
             )?;
             Ok(id)
+        })
+    }
+
+    pub fn get_project_state(&self, project_id: &str) -> AppResult<Option<ProjectStateRecord>> {
+        self.with_conn(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT project_id, current_step, last_commit, last_tag, summary, next_step, status, created_at, updated_at
+                 FROM project_states WHERE project_id = ?1",
+            )?;
+            let mut rows = stmt.query_map(params![project_id], |row| Self::map_project_state_row(row))?;
+            if let Some(row) = rows.next() {
+                Ok(Some(row?))
+            } else {
+                Ok(None)
+            }
+        })
+    }
+
+    pub fn upsert_project_state(&self, state: &ProjectStateRecord) -> AppResult<()> {
+        self.with_conn(|conn| {
+            conn.execute(
+                "INSERT INTO project_states (project_id, current_step, last_commit, last_tag, summary, next_step, status, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+                 ON CONFLICT(project_id) DO UPDATE SET
+                    current_step=excluded.current_step,
+                    last_commit=excluded.last_commit,
+                    last_tag=excluded.last_tag,
+                    summary=excluded.summary,
+                    next_step=excluded.next_step,
+                    status=excluded.status,
+                    updated_at=excluded.updated_at",
+                params![
+                    state.project_id,
+                    state.current_step,
+                    state.last_commit,
+                    state.last_tag,
+                    state.summary,
+                    state.next_step,
+                    state.status,
+                    state.created_at,
+                    state.updated_at
+                ],
+            )?;
+            Ok(())
+        })
+    }
+
+    fn map_project_state_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ProjectStateRecord> {
+        Ok(ProjectStateRecord {
+            project_id: row.get(0)?,
+            current_step: row.get(1)?,
+            last_commit: row.get(2)?,
+            last_tag: row.get(3)?,
+            summary: row.get(4)?,
+            next_step: row.get(5)?,
+            status: row.get(6)?,
+            created_at: row.get(7)?,
+            updated_at: row.get(8)?,
         })
     }
 

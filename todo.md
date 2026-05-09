@@ -5,39 +5,38 @@
 - Step 2 complete: prompt policy files added, Gigi persona activated, and system prompt moved out of hardcoded Rust text.
 - Step 3 complete: `/chat` supports `conversation_id`, injects recent conversation history, and returns `history_used` / `history_messages_used`.
 - Step 3.1 complete: Gigi Egyptian style guard hotfix added.
-- Step 4 active: Long-Term Memory v1.
+- Step 4 complete: Long-Term Memory v1 works with SQLite/FTS and injects relevant memory into chat context.
+- Step 5 active: Project State Memory.
 
 ## Active step
 
-### Step 4 — Long-Term Memory v1
-- [x] Keep memory lightweight with SQLite/FTS only.
-- [x] Support flexible manual memory save payloads.
-- [x] Improve memory search with FTS normalization and fallbacks.
-- [x] Inject long-term memories into chat context.
-- [x] Add `memory_items_used` and `long_term_memory_loaded`.
+### Step 5 — Project State Memory
+- [x] Add `project_states` SQLite table.
+- [x] Add `ProjectStateRecord` and update request DTO.
+- [x] Add project state read/update endpoints.
+- [x] Inject active project and project state into prompt context.
+- [x] Add `project_state_used` and `project_state_loaded` signals.
 - [ ] Run `cargo fmt`.
 - [ ] Run `cargo check`.
-- [ ] Run daemon and test memory save/search/chat injection.
+- [ ] Run daemon and test project state save/read/chat injection.
 - [ ] Commit/tag after successful checks.
 
-## Next step candidates — choose after Step 4
+## Next step candidates — choose after Step 5
 
-### Candidate A — Step 5: Project State Memory
-- Store per-project current step/status.
-- Track last committed tag per project.
-- Add project-specific rules/context injection.
-- Make Gigi know the active project state without relying only on chat history.
-
-### Candidate B — Step 5: Conversation Management API
+### Candidate A — Step 6: Conversation Management API
 - Add `GET /conversations`.
 - Add `GET /conversations/:id/messages`.
 - Add rename conversation endpoint.
 - Add delete/archive conversation endpoint.
 - Keep this API UI-neutral so Flutter/Tauri/Web clients can all use it.
 
+### Candidate B — Step 6: Tool Approval Flow v1
+- Make tool approvals explicit and logged.
+- Add safer structured output for proposed tool calls.
+- Keep dangerous tools disabled without approval.
+
 ### Later
 - SSE streaming.
-- Stronger tool approval flow.
 - CLI client.
 - EDL connector contract.
 - StoreOS connector contract.

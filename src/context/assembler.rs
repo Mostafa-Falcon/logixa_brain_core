@@ -3,7 +3,7 @@ use crate::{
     config::BrainConfig,
     context::prompt_loader::PromptLoader,
     error::AppResult,
-    memory::db::{BrainDb, MemoryRecord, MessageRecord},
+    memory::db::{BrainDb, MemoryRecord, MessageRecord, ProjectRecord, ProjectStateRecord},
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -11,6 +11,8 @@ use std::sync::Arc;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AssembledContext {
     pub project_id: String,
+    pub project: Option<ProjectRecord>,
+    pub project_state: Option<ProjectStateRecord>,
     pub recent_messages: Vec<MessageRecord>,
     pub memories: Vec<MemoryRecord>,
     pub system_prompt: String,
@@ -58,10 +60,14 @@ impl ContextAssembler {
             vec![]
         };
 
+        let project = self.db.get_project(&active_project_id).ok().flatten();
+        let project_state = self.db.get_project_state(&active_project_id).ok().flatten();
         let system_prompt = PromptLoader::load_system_prompt(mode, &active_project_id)?;
 
         Ok(AssembledContext {
             project_id: active_project_id,
+            project,
+            project_state,
             recent_messages: recent,
             memories,
             system_prompt,

@@ -308,3 +308,70 @@ curl -s -X POST http://127.0.0.1:8787/chat \
 - Memory update/delete endpoints.
 - Memory browser API.
 - Embeddings/vector retrieval.
+
+---
+
+## Step 5 — Project State Memory
+
+### Goal
+Add lightweight per-project state so Gigi can know what project is active, where the project stands, what the last step/tag/commit was, and what should happen next without relying only on chat history.
+
+### Decisions implemented
+- Keep project state inside SQLite.
+- Do not add UI, background indexing, Vector DB, embeddings, or filesystem scanning.
+- Add `project_states` table separate from the base `projects` registry.
+- Inject active project context and project state into the system prompt.
+- Add API endpoints for reading/updating project state.
+- Add `project_id` and `project_state_used` to chat responses.
+- Add `project_state_loaded` event when project state is included in context.
+
+### Files changed
+- src/dto.rs
+- src/api/mod.rs
+- src/api/routes_projects.rs
+- src/brain/engine.rs
+- src/context/assembler.rs
+- src/context/prompt_builder.rs
+- src/memory/db.rs
+- src/projects/project_manager.rs
+- did.md
+- todo.md
+
+### Checks to run locally
+```bash
+cargo fmt
+cargo check
+cargo run --bin logixa-brain-daemon
+```
+
+In another terminal:
+```bash
+curl -s -X POST http://127.0.0.1:8787/projects/logixa_brain/state \
+  -H "Content-Type: application/json" \
+  -d '{
+    "current_step":"Step 5 — Project State Memory",
+    "last_commit":"af8a814",
+    "last_tag":"brain-step4-long-term-memory",
+    "summary":"Logixa Brain Core has boot, Gigi prompt policy, conversation history, Egyptian style guard, and long-term memory v1.",
+    "next_step":"Validate project state injection, then commit/tag Step 5.",
+    "status":"active"
+  }'
+
+curl -s http://127.0.0.1:8787/projects/logixa_brain/state
+
+curl -s -X POST http://127.0.0.1:8787/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"إحنا واقفين فين في مشروع العقل؟","project_id":"logixa_brain","mode":"chat","use_memory":true}'
+```
+
+### Expected result
+- Project state can be saved and read back.
+- Chat response includes `project_state_used:true`.
+- Chat events include `project_state_loaded`.
+- Gigi should answer using the project state summary/current step.
+
+### Deferred
+- Automatic project state updates after commit/tag.
+- Project state history/audit timeline.
+- Project files indexing.
+- CLI client for project state updates.
