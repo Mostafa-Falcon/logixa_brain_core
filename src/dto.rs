@@ -82,3 +82,15 @@ pub struct ToolRunRequest {
     pub input: serde_json::Value,
     pub approved: Option<bool>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolRequestRequest {
+    pub tool_name: String,
+    pub project_id: Option<String>,
+    pub input: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolDecisionRequest {
+    pub note: Option<String>,
+}

@@ -375,3 +375,45 @@ curl -s -X POST http://127.0.0.1:8787/chat \
 - Project state history/audit timeline.
 - Project files indexing.
 - CLI client for project state updates.
+
+## Step 6 — Tool Approval Flow v1
+
+Goal: Add a safe approval flow before any real tool execution.
+
+What changed:
+- Added pending tool calls table to SQLite.
+- Added tool approval/rejection endpoints.
+- Disabled direct `/tools/run` execution for this stage.
+- Added `/tools/request`, `/tools/pending`, `/tools/approve/:id`, `/tools/reject/:id`, and `/tools/runs`.
+- Limited executable tools in v1 to read-only tools:
+  - `list_files`
+  - `git_status`
+  - `git_diff`
+- All v1 tools require approval before execution.
+- Approved tool execution writes to `tool_runs`.
+
+Files changed:
+- src/dto.rs
+- src/api/mod.rs
+- src/api/routes_tools.rs
+- src/memory/db.rs
+- src/tools/registry.rs
+- did.md
+- todo.md
+- README_STEP_6.md
+
+Deferred:
+- `read_file`
+- `run_command`
+- `write_file`
+- `git_commit`
+- automatic tool selection from chat
+- UI/CLI approval client
+
+Checks:
+- Run `cargo fmt`
+- Run `cargo check`
+- Run daemon and test request/pending/approve/reject flow.
+
+Next step:
+- Step 7 should add a CLI client or safe command runner after approval flow is verified.

@@ -35,6 +35,11 @@ pub fn router(state: AppState) -> Router {
             get(routes_projects::get_project_state).post(routes_projects::update_project_state),
         )
         .route("/tools", get(routes_tools::list_tools))
+        .route("/tools/request", post(routes_tools::request_tool))
+        .route("/tools/pending", get(routes_tools::pending_tools))
+        .route("/tools/approve/:id", post(routes_tools::approve_tool))
+        .route("/tools/reject/:id", post(routes_tools::reject_tool))
+        .route("/tools/runs", get(routes_tools::recent_tool_runs))
         .route("/tools/run", post(routes_tools::run_tool))
         .route("/logs", get(routes_logs::recent_logs))
         .with_state(state)

@@ -1,44 +1,52 @@
-# todo.md — Logixa Brain Core Roadmap
+# Logixa Brain Core TODO
 
-## Current status
-- Step 1 complete: `logixa-brain-daemon` builds, runs, answers `/status`, initializes SQLite, and answers `/chat` through Qwen with `mocked=false`.
-- Step 2 complete: prompt policy files added, Gigi persona activated, and system prompt moved out of hardcoded Rust text.
-- Step 3 complete: `/chat` supports `conversation_id`, injects recent conversation history, and returns `history_used` / `history_messages_used`.
-- Step 3.1 complete: Gigi Egyptian style guard hotfix added.
-- Step 4 complete: Long-Term Memory v1 works with SQLite/FTS and injects relevant memory into chat context.
-- Step 5 active: Project State Memory.
+## Current stable status
 
-## Active step
+Completed:
+- Step 1 — Brain Core Boot
+- Step 2 — Gigi Prompt Policy
+- Step 3 — Conversation History Context
+- Step 3.1 — Gigi Egyptian Style Guard
+- Step 4 — Long-Term Memory v1
+- Step 5 — Project State Memory
+- Step 6 — Tool Approval Flow v1
 
-### Step 5 — Project State Memory
-- [x] Add `project_states` SQLite table.
-- [x] Add `ProjectStateRecord` and update request DTO.
-- [x] Add project state read/update endpoints.
-- [x] Inject active project and project state into prompt context.
-- [x] Add `project_state_used` and `project_state_loaded` signals.
-- [ ] Run `cargo fmt`.
-- [ ] Run `cargo check`.
-- [ ] Run daemon and test project state save/read/chat injection.
-- [ ] Commit/tag after successful checks.
+## Next recommended steps
 
-## Next step candidates — choose after Step 5
+### Step 7 — CLI Client v1
 
-### Candidate A — Step 6: Conversation Management API
-- Add `GET /conversations`.
-- Add `GET /conversations/:id/messages`.
-- Add rename conversation endpoint.
-- Add delete/archive conversation endpoint.
-- Keep this API UI-neutral so Flutter/Tauri/Web clients can all use it.
+Goal:
+- Add a small `logixa-brain` CLI client for:
+  - status
+  - chat
+  - memory save/search
+  - project state get/set
+  - tool request/pending/approve/reject
 
-### Candidate B — Step 6: Tool Approval Flow v1
-- Make tool approvals explicit and logged.
-- Add safer structured output for proposed tool calls.
-- Keep dangerous tools disabled without approval.
+Why:
+- The brain is headless.
+- A CLI makes testing and future UI integration easier without adding a UI framework.
 
-### Later
-- SSE streaming.
-- CLI client.
-- EDL connector contract.
-- StoreOS connector contract.
-- MCP adapter.
-- Release packaging.
+### Step 8 — Safe Command Runner v1
+
+Goal:
+- Add approval-protected `run_command` with tight controls:
+  - command allow/deny policy
+  - cwd validation
+  - timeout
+  - output limits
+  - audit logging
+
+### Step 9 — Patch Proposal System
+
+Goal:
+- Let Gigi propose file edits as patches, not write files directly.
+- Apply patches only after explicit approval.
+
+## Deferred
+
+- UI client
+- MCP adapter
+- embeddings/vector search
+- multiple model profile switching
+- automatic tool planning from chat

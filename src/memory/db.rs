@@ -54,6 +54,20 @@ pub struct ProjectStateRecord {
     pub updated_at: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PendingToolCallRecord {
+    pub id: String,
+    pub tool_name: String,
+    pub project_id: Option<String>,
+    pub input_json: String,
+    pub status: String,
+    pub danger_level: String,
+    pub created_at: String,
+    pub updated_at: String,
+    pub decided_at: Option<String>,
+    pub decision_note: Option<String>,
+}
+
 pub struct BrainDb {
     conn: Mutex<Connection>,
 }
@@ -171,6 +185,19 @@ impl BrainDb {
                     created_at TEXT NOT NULL
                 );
 
+                CREATE TABLE IF NOT EXISTS pending_tool_calls (
+                    id TEXT PRIMARY KEY,
+                    tool_name TEXT NOT NULL,
+                    project_id TEXT,
+                    input_json TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    danger_level TEXT NOT NULL DEFAULT 'low',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    decided_at TEXT,
+                    decision_note TEXT
+                );
+
                 CREATE TABLE IF NOT EXISTS system_events (
                     id TEXT PRIMARY KEY,
                     level TEXT NOT NULL,
@@ -182,6 +209,8 @@ impl BrainDb {
                 CREATE INDEX IF NOT EXISTS idx_messages_conversation_created ON messages(conversation_id, created_at);
                 CREATE INDEX IF NOT EXISTS idx_memories_project ON memories(project_id);
                 CREATE INDEX IF NOT EXISTS idx_events_created ON system_events(created_at);
+                CREATE INDEX IF NOT EXISTS idx_pending_tool_calls_status ON pending_tool_calls(status, created_at);
+                CREATE INDEX IF NOT EXISTS idx_tool_runs_created ON tool_runs(created_at);
             "#)?;
             Ok(())
         })
@@ -629,6 +658,116 @@ impl BrainDb {
                 params![id, tool_name, input_json, output_json, if success { 1 } else { 0 }, now],
             )?;
             Ok(id)
+        })
+    }
+
+    pub fn insert_pending_tool_call(&self, pending: &PendingToolCallRecord) -> AppResult<()> {
+        self.with_conn(|conn| {
+            conn.execute(
+                "INSERT INTO pending_tool_calls (id, tool_name, project_id, input_json, status, danger_level, created_at, updated_at, decided_at, decision_note)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                params![
+                    pending.id,
+                    pending.tool_name,
+                    pending.project_id,
+                    pending.input_json,
+                    pending.status,
+                    pending.danger_level,
+                    pending.created_at,
+                    pending.updated_at,
+                    pending.decided_at,
+                    pending.decision_note
+                ],
+            )?;
+            Ok(())
+        })
+    }
+
+    pub fn get_pending_tool_call(&self, id: &str) -> AppResult<Option<PendingToolCallRecord>> {
+        self.with_conn(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT id, tool_name, project_id, input_json, status, danger_level, created_at, updated_at, decided_at, decision_note
+                 FROM pending_tool_calls WHERE id = ?1",
+            )?;
+            let mut rows = stmt.query_map(params![id], Self::map_pending_tool_call_row)?;
+            if let Some(row) = rows.next() {
+                Ok(Some(row?))
+            } else {
+                Ok(None)
+            }
+        })
+    }
+
+    pub fn list_pending_tool_calls(&self, limit: usize) -> AppResult<Vec<PendingToolCallRecord>> {
+        self.with_conn(|conn| {
+            let bounded_limit = limit.clamp(1, 100) as i64;
+            let mut stmt = conn.prepare(
+                "SELECT id, tool_name, project_id, input_json, status, danger_level, created_at, updated_at, decided_at, decision_note
+                 FROM pending_tool_calls
+                 WHERE status = 'pending'
+                 ORDER BY created_at DESC
+                 LIMIT ?1",
+            )?;
+            let rows = stmt.query_map(params![bounded_limit], Self::map_pending_tool_call_row)?;
+            Ok(rows.collect::<Result<Vec<_>, _>>()?)
+        })
+    }
+
+    pub fn update_pending_tool_status(
+        &self,
+        id: &str,
+        status: &str,
+        note: Option<&str>,
+    ) -> AppResult<()> {
+        let now = Utc::now().to_rfc3339();
+        self.with_conn(|conn| {
+            conn.execute(
+                "UPDATE pending_tool_calls
+                 SET status = ?1, updated_at = ?2, decided_at = ?2, decision_note = COALESCE(?3, decision_note)
+                 WHERE id = ?4",
+                params![status, now, note, id],
+            )?;
+            Ok(())
+        })
+    }
+
+    fn map_pending_tool_call_row(
+        row: &rusqlite::Row<'_>,
+    ) -> rusqlite::Result<PendingToolCallRecord> {
+        Ok(PendingToolCallRecord {
+            id: row.get(0)?,
+            tool_name: row.get(1)?,
+            project_id: row.get(2)?,
+            input_json: row.get(3)?,
+            status: row.get(4)?,
+            danger_level: row.get(5)?,
+            created_at: row.get(6)?,
+            updated_at: row.get(7)?,
+            decided_at: row.get(8)?,
+            decision_note: row.get(9)?,
+        })
+    }
+
+    pub fn recent_tool_runs(&self, limit: usize) -> AppResult<Vec<serde_json::Value>> {
+        self.with_conn(|conn| {
+            let bounded_limit = limit.clamp(1, 100) as i64;
+            let mut stmt = conn.prepare(
+                "SELECT id, tool_name, input_json, output_json, success, created_at
+                 FROM tool_runs
+                 ORDER BY created_at DESC
+                 LIMIT ?1",
+            )?;
+            let rows = stmt.query_map(params![bounded_limit], |row| {
+                Ok(serde_json::json!({
+                    "id": row.get::<_, String>(0)?,
+                    "tool_name": row.get::<_, String>(1)?,
+                    "input_json": row.get::<_, String>(2)?,
+                    "output_json": row.get::<_, Option<String>>(3)?,
+                    "success": row.get::<_, i64>(4)? == 1,
+                    "created_at": row.get::<_, String>(5)?,
+                }))
+            })?;
+            Ok(rows.collect::<Result<Vec<_>, _>>()?)
         })
     }
 }

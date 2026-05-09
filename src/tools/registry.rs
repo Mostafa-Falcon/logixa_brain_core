@@ -1,7 +1,7 @@
 use crate::{
     error::{AppError, AppResult},
     memory::db::BrainDb,
-    tools::{command_tools, file_tools, git_tools},
+    tools::{file_tools, git_tools},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -25,33 +25,27 @@ impl ToolRegistry {
             definitions: vec![
                 ToolDefinition {
                     name: "list_files".to_string(),
-                    description: "List files inside an allowed path".to_string(),
-                    requires_approval: false,
-                    danger_level: "low".to_string(),
-                },
-                ToolDefinition {
-                    name: "read_file".to_string(),
-                    description: "Read a UTF-8 text file".to_string(),
-                    requires_approval: false,
+                    description:
+                        "List files inside an allowed path. Read-only. Requires approval in v1."
+                            .to_string(),
+                    requires_approval: true,
                     danger_level: "low".to_string(),
                 },
                 ToolDefinition {
                     name: "git_status".to_string(),
-                    description: "Run git status --short in a repo".to_string(),
-                    requires_approval: false,
+                    description:
+                        "Run git status --short in a repo. Read-only. Requires approval in v1."
+                            .to_string(),
+                    requires_approval: true,
                     danger_level: "low".to_string(),
                 },
                 ToolDefinition {
                     name: "git_diff".to_string(),
-                    description: "Run git diff --stat in a repo".to_string(),
-                    requires_approval: false,
-                    danger_level: "low".to_string(),
-                },
-                ToolDefinition {
-                    name: "run_command".to_string(),
-                    description: "Run a shell command with timeout. Requires approval.".to_string(),
+                    description:
+                        "Run git diff --stat in a repo. Read-only. Requires approval in v1."
+                            .to_string(),
                     requires_approval: true,
-                    danger_level: "high".to_string(),
+                    danger_level: "low".to_string(),
                 },
             ],
         }
@@ -61,48 +55,50 @@ impl ToolRegistry {
         self.definitions.clone()
     }
 
-    pub async fn run(
-        &self,
-        name: String,
-        input: Value,
-        approved: bool,
-        db: Arc<BrainDb>,
-    ) -> AppResult<Value> {
-        let requires_approval = self
-            .definitions
+    pub fn definition_for(&self, name: &str) -> Option<ToolDefinition> {
+        self.definitions
             .iter()
             .find(|tool| tool.name == name)
-            .map(|tool| tool.requires_approval)
-            .unwrap_or(true);
-        if requires_approval && !approved {
-            return Err(AppError::Request(format!(
-                "tool `{name}` requires approval=true"
-            )));
-        }
+            .cloned()
+    }
 
+    pub fn validate_request(&self, name: &str) -> AppResult<ToolDefinition> {
+        self.definition_for(name)
+            .ok_or_else(|| AppError::NotFound(format!("unknown or disabled tool `{name}`")))
+    }
+
+    pub async fn execute_approved(
+        &self,
+        name: &str,
+        input: Value,
+        db: Arc<BrainDb>,
+    ) -> AppResult<Value> {
+        self.validate_request(name)?;
         let input_json = input.to_string();
-        let result = match name.as_str() {
+
+        let result = match name {
             "list_files" => file_tools::list_files(input),
-            "read_file" => file_tools::read_file(input),
             "git_status" => git_tools::git_status(input).await,
             "git_diff" => git_tools::git_diff(input).await,
-            "run_command" => command_tools::run_command(input).await,
-            _ => Err(AppError::NotFound(format!("unknown tool `{name}`"))),
+            _ => Err(AppError::NotFound(format!(
+                "unknown or disabled tool `{name}`"
+            ))),
         };
 
         match &result {
             Ok(value) => {
-                let _ = db.insert_tool_run(&name, &input_json, Some(&value.to_string()), true);
+                let _ = db.insert_tool_run(name, &input_json, Some(&value.to_string()), true);
             }
             Err(err) => {
                 let _ = db.insert_tool_run(
-                    &name,
+                    name,
                     &input_json,
                     Some(&serde_json::json!({"error": err.to_string()}).to_string()),
                     false,
                 );
             }
         }
+
         result
     }
 }
