@@ -89,15 +89,41 @@ curl http://127.0.0.1:8787/status
 
 ### Chat
 
+Start a new conversation:
+
 ```bash
 curl -X POST http://127.0.0.1:8787/chat \
   -H "Content-Type: application/json" \
   -d '{
-    "message": "إنت مين؟",
+    "message": "إنتِ مين؟",
     "project_id": "logixa_brain",
     "mode": "auto",
     "use_memory": true
   }'
+```
+
+Continue an existing conversation by sending the returned `conversation_id`:
+
+```bash
+curl -X POST http://127.0.0.1:8787/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "أنا اسمي إيه؟",
+    "conversation_id": "PASTE_CONVERSATION_ID_HERE",
+    "project_id": "logixa_brain",
+    "mode": "chat",
+    "use_memory": true
+  }'
+```
+
+The response includes:
+
+```json
+{
+  "history_used": true,
+  "history_messages_used": 2,
+  "events": ["preparing_context", "conversation_history_loaded", "model_ready", "generating_done", "saving_memory", "done"]
+}
 ```
 
 ### Save memory

@@ -192,6 +192,21 @@ impl BrainDb {
         })
     }
 
+    pub fn conversation_project_id(
+        &self,
+        conversation_id: &str,
+    ) -> AppResult<Option<Option<String>>> {
+        self.with_conn(|conn| {
+            let mut stmt = conn.prepare("SELECT project_id FROM conversations WHERE id = ?1")?;
+            let mut rows = stmt.query(params![conversation_id])?;
+            if let Some(row) = rows.next()? {
+                Ok(Some(row.get::<_, Option<String>>(0)?))
+            } else {
+                Ok(None)
+            }
+        })
+    }
+
     pub fn save_message(
         &self,
         conversation_id: &str,

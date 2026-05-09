@@ -16,6 +16,8 @@ pub struct ChatResponse {
     pub mode_used: String,
     pub model_used: String,
     pub memory_used: bool,
+    pub history_used: bool,
+    pub history_messages_used: usize,
     pub events: Vec<String>,
     pub tool_calls: Vec<String>,
     pub mocked: bool,

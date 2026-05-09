@@ -131,3 +131,68 @@ curl -X POST http://127.0.0.1:8787/chat \
 - Prompt editing API.
 - Prompt reload endpoint.
 - Per-project prompt overrides.
+
+---
+
+## Step 3 — Add conversation history context
+
+### Goal
+Make `/chat` continue an existing conversation when `conversation_id` is provided, and inject the latest messages from that conversation into the model prompt so Gigi can answer with short-term conversational context.
+
+### Decisions implemented
+- Conversation continuation is explicit through `conversation_id` in `ChatRequest`.
+- New conversations are still created automatically when `conversation_id` is omitted.
+- Provided `conversation_id` is validated before saving the new user message.
+- If the conversation belongs to a different project than the requested `project_id`, the request returns a clear error instead of mixing project scopes.
+- Recent conversation messages are loaded using `max_recent_messages` from `brain_config.toml`.
+- The response now reports:
+  - `history_used`
+  - `history_messages_used`
+- Event stream now includes `conversation_history_loaded` when prior messages are used.
+- No UI, model runtime, tool execution, or MCP work was added in this step.
+
+### Files changed
+- src/dto.rs
+- src/brain/engine.rs
+- src/memory/db.rs
+- README.md
+- did.md
+- todo.md
+
+### Checks to run locally
+```bash
+cargo fmt
+cargo check
+cargo run --bin logixa-brain-daemon
+```
+
+In another terminal:
+```bash
+FIRST=$(curl -s -X POST http://127.0.0.1:8787/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"اسمي مصطفى. افتكري الاسم في المحادثة دي فقط.","project_id":"logixa_brain","mode":"chat","use_memory":true}')
+
+CID=$(printf '%s' "$FIRST" | python3 -c 'import json,sys; print(json.load(sys.stdin)["conversation_id"])')
+
+echo "$FIRST"
+
+echo "Conversation: $CID"
+
+curl -s -X POST http://127.0.0.1:8787/chat \
+  -H "Content-Type: application/json" \
+  -d "{\"message\":\"أنا اسمي إيه؟\",\"conversation_id\":\"$CID\",\"project_id\":\"logixa_brain\",\"mode\":\"chat\",\"use_memory\":true}"
+```
+
+### Expected result
+- The second response should answer using the previous message context.
+- Response should include `history_used:true`.
+- Response should include `history_messages_used` greater than 0.
+- Response events should include `conversation_history_loaded`.
+- Response should still include `mocked:false` when the real model is working.
+
+### Deferred
+- `/conversations` listing endpoint.
+- Conversation rename/delete API.
+- Conversation pagination.
+- Summarized long-history compression.
+- Per-project chat history browser UI.
