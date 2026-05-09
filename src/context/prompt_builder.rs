@@ -37,7 +37,7 @@ impl PromptBuilder {
     fn build_system_content(context: &AssembledContext) -> String {
         let mut out = context.system_prompt.clone();
         if !context.memories.is_empty() {
-            out.push_str("\nRelevant memory:\n");
+            out.push_str("\n# Relevant Memory\n\n");
             for memory in &context.memories {
                 out.push_str(&format!(
                     "- [{}:{}] {}\n",
