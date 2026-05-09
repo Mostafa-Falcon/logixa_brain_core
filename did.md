@@ -246,3 +246,65 @@ curl -s -X POST http://127.0.0.1:8787/chat \
 - Prompt reload endpoint.
 - Per-project style overrides.
 - Full response quality evaluator.
+
+## Step 4 — Long-Term Memory v1
+
+### Goal
+Add lightweight long-term memory v1 using SQLite/FTS only, separate from conversation history, and injectable into chat context when relevant.
+
+### Decisions implemented
+- Keep memory local and serverless with SQLite only.
+- Do not add Vector DB, embeddings, background indexing, or UI work.
+- Support flexible `/memory/save` payloads: `kind/content` and `key/value`.
+- Normalize tags from either string or JSON array.
+- Clamp memory importance between 1 and 5.
+- Improve FTS query normalization and use LIKE fallback.
+- Add final top-memory fallback for indirect questions such as asking for a saved preferred name.
+- Add `memory_items_used` to `/chat` response.
+- Add `long_term_memory_loaded` event when memories are injected.
+
+### Files changed
+- src/dto.rs
+- src/api/routes_memory.rs
+- src/brain/engine.rs
+- src/context/prompt_builder.rs
+- src/memory/db.rs
+- src/memory/memory_manager.rs
+- src/memory/search.rs
+- did.md
+- todo.md
+- README_STEP_4.md
+
+### Checks to run locally
+```bash
+cargo fmt
+cargo check
+cargo run --bin logixa-brain-daemon
+```
+
+In another terminal:
+```bash
+curl -s -X POST http://127.0.0.1:8787/memory/save \
+  -H "Content-Type: application/json" \
+  -d '{"scope":"user","key":"preferred_name","value":"مصطفى","tags":["identity","user"],"importance":5}'
+
+curl -s -X POST http://127.0.0.1:8787/memory/search \
+  -H "Content-Type: application/json" \
+  -d '{"query":"مصطفى","scope":"user","limit":6}'
+
+curl -s -X POST http://127.0.0.1:8787/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"أنا اسمي إيه؟","project_id":"logixa_brain","mode":"chat","use_memory":true}'
+```
+
+### Expected result
+- `/memory/save` returns `ok:true` and an `item`.
+- `/memory/search` returns the saved memory.
+- `/chat` includes `memory_used:true` and `memory_items_used > 0`.
+- Events include `long_term_memory_loaded`.
+
+### Deferred
+- Automatic memory extraction.
+- Memory update/delete endpoints.
+- Memory browser API.
+- Embeddings/vector retrieval.

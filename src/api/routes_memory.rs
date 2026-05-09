@@ -12,8 +12,8 @@ pub async fn save_memory(
     Json(req): Json<MemorySaveRequest>,
 ) -> AppResult<Json<serde_json::Value>> {
     let manager = MemoryManager::new(state.db.clone());
-    let id = manager.save_memory(req)?;
-    Ok(Json(json!({"ok": true, "id": id})))
+    let item = manager.save_memory(req)?;
+    Ok(Json(json!({"ok": true, "id": item.id, "item": item})))
 }
 
 pub async fn search_memory(
@@ -22,5 +22,7 @@ pub async fn search_memory(
 ) -> AppResult<Json<serde_json::Value>> {
     let manager = MemoryManager::new(state.db.clone());
     let items = manager.search(req)?;
-    Ok(Json(json!({"ok": true, "items": items})))
+    Ok(Json(
+        json!({"ok": true, "count": items.len(), "items": items}),
+    ))
 }

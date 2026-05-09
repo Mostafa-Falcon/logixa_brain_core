@@ -47,11 +47,16 @@ impl BrainEngine {
         )?;
         let history_messages_used = assembled.recent_messages.len().saturating_sub(1);
         let history_used = history_messages_used > 0;
+        let memory_items_used = assembled.memories.len();
+        let memory_used = use_memory && memory_items_used > 0;
         let messages = PromptBuilder::build(&assembled, &req.message);
 
         let mut events = vec!["preparing_context".to_string()];
         if history_used {
             events.push("conversation_history_loaded".to_string());
+        }
+        if memory_used {
+            events.push("long_term_memory_loaded".to_string());
         }
 
         let mut mocked = false;
@@ -100,7 +105,9 @@ impl BrainEngine {
                 "mode": mode.as_str(),
                 "mocked": mocked,
                 "history_used": history_used,
-                "history_messages_used": history_messages_used
+                "history_messages_used": history_messages_used,
+                "memory_used": memory_used,
+                "memory_items_used": memory_items_used
             })),
         );
         events.push("done".to_string());
@@ -110,7 +117,8 @@ impl BrainEngine {
             conversation_id,
             mode_used: mode.as_str().to_string(),
             model_used: cfg.model.name,
-            memory_used: use_memory && !assembled.memories.is_empty(),
+            memory_used,
+            memory_items_used,
             history_used,
             history_messages_used,
             events,

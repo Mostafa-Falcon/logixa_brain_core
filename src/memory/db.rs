@@ -1,4 +1,4 @@
-use crate::{config::BrainConfig, error::AppResult};
+use crate::{config::BrainConfig, error::AppResult, memory::search::normalize_fts_query};
 use chrono::Utc;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
@@ -271,41 +271,150 @@ impl BrainDb {
         project_id: Option<&str>,
         limit: usize,
     ) -> AppResult<Vec<MemoryRecord>> {
+        self.search_memories_filtered(query, project_id, None, None, limit)
+    }
+
+    pub fn search_memories_filtered(
+        &self,
+        query: &str,
+        project_id: Option<&str>,
+        scope: Option<&str>,
+        kind: Option<&str>,
+        limit: usize,
+    ) -> AppResult<Vec<MemoryRecord>> {
         self.with_conn(|conn| {
-            let safe_query = query.replace('"', " ");
-            let sql = if project_id.is_some() {
-                "SELECT m.id, m.scope, m.project_id, m.kind, m.content, m.tags, m.importance, m.created_at, m.updated_at
-                 FROM memories_fts f JOIN memories m ON m.id = f.id
-                 WHERE memories_fts MATCH ?1 AND (m.project_id = ?2 OR m.project_id IS NULL)
-                 ORDER BY m.importance DESC, m.updated_at DESC LIMIT ?3"
-            } else {
-                "SELECT m.id, m.scope, m.project_id, m.kind, m.content, m.tags, m.importance, m.created_at, m.updated_at
-                 FROM memories_fts f JOIN memories m ON m.id = f.id
-                 WHERE memories_fts MATCH ?1
-                 ORDER BY m.importance DESC, m.updated_at DESC LIMIT ?3"
-            };
-            let mut stmt = conn.prepare(sql)?;
-            let map_row = |row: &rusqlite::Row| -> rusqlite::Result<MemoryRecord> {
-                Ok(MemoryRecord {
-                    id: row.get(0)?,
-                    scope: row.get(1)?,
-                    project_id: row.get(2)?,
-                    kind: row.get(3)?,
-                    content: row.get(4)?,
-                    tags: row.get(5)?,
-                    importance: row.get(6)?,
-                    created_at: row.get(7)?,
-                    updated_at: row.get(8)?,
-                })
-            };
-            if let Some(pid) = project_id {
-                let rows = stmt.query_map(params![safe_query, pid, limit as i64], map_row)?;
-                Ok(rows.collect::<Result<Vec<_>, _>>()?)
-            } else {
-                let rows = stmt.query_map(params![safe_query, "", limit as i64], map_row)?;
-                Ok(rows.collect::<Result<Vec<_>, _>>()?)
+            let bounded_limit = limit.clamp(1, 24) as i64;
+            let trimmed_query = query.trim();
+
+            if trimmed_query.is_empty() {
+                return Self::list_memories_filtered_conn(
+                    conn,
+                    project_id,
+                    scope,
+                    kind,
+                    bounded_limit,
+                );
             }
+
+            let fts_query = normalize_fts_query(trimmed_query);
+            if !fts_query.is_empty() {
+                let fts_result = Self::search_memories_fts_conn(
+                    conn,
+                    &fts_query,
+                    project_id,
+                    scope,
+                    kind,
+                    bounded_limit,
+                );
+                if let Ok(items) = fts_result {
+                    if !items.is_empty() {
+                        return Ok(items);
+                    }
+                }
+            }
+
+            let like_items = Self::search_memories_like_conn(
+                conn,
+                trimmed_query,
+                project_id,
+                scope,
+                kind,
+                bounded_limit,
+            )?;
+            if !like_items.is_empty() {
+                return Ok(like_items);
+            }
+
+            Self::list_memories_filtered_conn(conn, project_id, scope, kind, bounded_limit)
         })
+    }
+
+    fn map_memory_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MemoryRecord> {
+        Ok(MemoryRecord {
+            id: row.get(0)?,
+            scope: row.get(1)?,
+            project_id: row.get(2)?,
+            kind: row.get(3)?,
+            content: row.get(4)?,
+            tags: row.get(5)?,
+            importance: row.get(6)?,
+            created_at: row.get(7)?,
+            updated_at: row.get(8)?,
+        })
+    }
+
+    fn search_memories_fts_conn(
+        conn: &Connection,
+        fts_query: &str,
+        project_id: Option<&str>,
+        scope: Option<&str>,
+        kind: Option<&str>,
+        limit: i64,
+    ) -> rusqlite::Result<Vec<MemoryRecord>> {
+        let mut stmt = conn.prepare(
+            "SELECT m.id, m.scope, m.project_id, m.kind, m.content, m.tags, m.importance, m.created_at, m.updated_at
+             FROM memories_fts f JOIN memories m ON m.id = f.id
+             WHERE memories_fts MATCH ?1
+               AND (?2 IS NULL OR m.project_id = ?2 OR m.project_id IS NULL)
+               AND (?3 IS NULL OR m.scope = ?3)
+               AND (?4 IS NULL OR m.kind = ?4)
+             ORDER BY m.importance DESC, m.updated_at DESC
+             LIMIT ?5",
+        )?;
+        let rows = stmt.query_map(
+            params![fts_query, project_id, scope, kind, limit],
+            Self::map_memory_row,
+        )?;
+        rows.collect::<Result<Vec<_>, _>>()
+    }
+
+    fn search_memories_like_conn(
+        conn: &Connection,
+        query: &str,
+        project_id: Option<&str>,
+        scope: Option<&str>,
+        kind: Option<&str>,
+        limit: i64,
+    ) -> AppResult<Vec<MemoryRecord>> {
+        let like_query = format!("%{}%", query);
+        let mut stmt = conn.prepare(
+            "SELECT m.id, m.scope, m.project_id, m.kind, m.content, m.tags, m.importance, m.created_at, m.updated_at
+             FROM memories m
+             WHERE (m.content LIKE ?1 OR IFNULL(m.tags, '') LIKE ?1 OR m.kind LIKE ?1 OR m.scope LIKE ?1)
+               AND (?2 IS NULL OR m.project_id = ?2 OR m.project_id IS NULL)
+               AND (?3 IS NULL OR m.scope = ?3)
+               AND (?4 IS NULL OR m.kind = ?4)
+             ORDER BY m.importance DESC, m.updated_at DESC
+             LIMIT ?5",
+        )?;
+        let rows = stmt.query_map(
+            params![like_query, project_id, scope, kind, limit],
+            Self::map_memory_row,
+        )?;
+        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+
+    fn list_memories_filtered_conn(
+        conn: &Connection,
+        project_id: Option<&str>,
+        scope: Option<&str>,
+        kind: Option<&str>,
+        limit: i64,
+    ) -> AppResult<Vec<MemoryRecord>> {
+        let mut stmt = conn.prepare(
+            "SELECT m.id, m.scope, m.project_id, m.kind, m.content, m.tags, m.importance, m.created_at, m.updated_at
+             FROM memories m
+             WHERE (?1 IS NULL OR m.project_id = ?1 OR m.project_id IS NULL)
+               AND (?2 IS NULL OR m.scope = ?2)
+               AND (?3 IS NULL OR m.kind = ?3)
+             ORDER BY m.importance DESC, m.updated_at DESC
+             LIMIT ?4",
+        )?;
+        let rows = stmt.query_map(
+            params![project_id, scope, kind, limit],
+            Self::map_memory_row,
+        )?;
+        Ok(rows.collect::<Result<Vec<_>, _>>()?)
     }
 
     pub fn list_projects(&self) -> AppResult<Vec<ProjectRecord>> {

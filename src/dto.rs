@@ -16,6 +16,7 @@ pub struct ChatResponse {
     pub mode_used: String,
     pub model_used: String,
     pub memory_used: bool,
+    pub memory_items_used: usize,
     pub history_used: bool,
     pub history_messages_used: usize,
     pub events: Vec<String>,
@@ -37,9 +38,11 @@ pub struct StatusResponse {
 pub struct MemorySaveRequest {
     pub scope: String,
     pub project_id: Option<String>,
-    pub kind: String,
-    pub content: String,
-    pub tags: Option<String>,
+    pub kind: Option<String>,
+    pub content: Option<String>,
+    pub key: Option<String>,
+    pub value: Option<String>,
+    pub tags: Option<serde_json::Value>,
     pub importance: Option<i64>,
 }
 
@@ -47,6 +50,8 @@ pub struct MemorySaveRequest {
 pub struct MemorySearchRequest {
     pub query: String,
     pub project_id: Option<String>,
+    pub scope: Option<String>,
+    pub kind: Option<String>,
     pub limit: Option<usize>,
 }
 
