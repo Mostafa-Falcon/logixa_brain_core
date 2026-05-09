@@ -196,3 +196,53 @@ curl -s -X POST http://127.0.0.1:8787/chat \
 - Conversation pagination.
 - Summarized long-history compression.
 - Per-project chat history browser UI.
+
+## Step 3.1 — Gigi Egyptian style guard hotfix
+
+### Goal
+Stabilize Gigi's Egyptian feminine style before adding long-term memory, because Step 3 showed functional conversation history but the model still leaked Gulf phrases such as "إيش".
+
+### Decisions implemented
+- Keep persona details short and layered to avoid growing the system prompt too much.
+- Strengthen `style_egyptian.md` with explicit banned phrases and Egyptian replacements.
+- Shorten Chat Mode behavior so normal chat does not become long, generic planning text.
+- Add a minimal deterministic `ResponsePipeline` style guard for repeated leakage words only.
+- Keep the cleaner conservative: no broad rewriting, no model/tool/runtime changes, and no UI work.
+
+### Files changed
+- prompts/identity.md
+- prompts/style_egyptian.md
+- prompts/modes/chat.md
+- src/brain/response_pipeline.rs
+- did.md
+- todo.md
+
+### Checks to run locally
+```bash
+cargo fmt
+cargo check
+cargo run --bin logixa-brain-daemon
+```
+
+In another terminal:
+```bash
+curl -s -X POST http://127.0.0.1:8787/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"إنتِ مين؟","project_id":"logixa_brain","mode":"chat","use_memory":true}'
+
+curl -s -X POST http://127.0.0.1:8787/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"قوليلي نعمل إيه النهارده من غير رغي","project_id":"logixa_brain","mode":"chat","use_memory":true}'
+```
+
+### Expected result
+- Response identifies as Gigi when asked.
+- Response uses feminine Egyptian wording.
+- Response avoids: إيش، تبيه، وش، شنو، أبغا، شلون.
+- Response should remain short in Chat Mode unless the user asks for detail.
+
+### Deferred
+- Prompt versioning in database.
+- Prompt reload endpoint.
+- Per-project style overrides.
+- Full response quality evaluator.
